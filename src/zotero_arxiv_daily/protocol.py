@@ -28,7 +28,7 @@ class Paper:
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
 
-    # Added by the hybrid reranker.
+    # Added by our physics/math/code-aware reranker.
     zotero_similarity: Optional[float] = None
     physics_depth: Optional[float] = None
     math_depth: Optional[float] = None
@@ -58,8 +58,16 @@ class Paper:
 
         return "\n".join(parts)
 
-    def _generate_tldr_with_llm(self, openai_client: OpenAI, llm_params: dict) -> str:
+    def _generate_tldr_with_llm(
+        self,
+        openai_client: OpenAI,
+        llm_params: dict,
+    ) -> str:
         lang = llm_params.get("language", "English")
+
+        if not self.full_text and not self.abstract:
+            logger.warning(f"Neither full text nor abstract is provided for {self.url}")
+            return "Failed to generate TLDR.\nNeither full text nor abstract is provided"
 
         prompt = f"""
 You are a senior paper-reading assistant for theoretical physics, mathematical physics,
@@ -115,11 +123,6 @@ Preview of main content:
 {self.full_text}
 """
 
-        if not self.full_text and not self.abstract:
-            logger.warning(f"Neither full text nor abstract is provided for {self.url}")
-            return "Failed to generate summary. Neither full text nor abstract is provided."
-
-        # Use gpt-4o tokenizer only for conservative truncation.
         try:
             enc = tiktoken.encoding_for_model("gpt-4o")
         except Exception:
@@ -134,9 +137,10 @@ Preview of main content:
                 {
                     "role": "system",
                     "content": (
-                        "You are a precise scientific-paper analyst for theoretical physics, "
-                        "mathematical physics, statistical mechanics, probability, and "
-                        "machine-learning theory. Avoid hype. Be concrete."
+                        f"You are an assistant who perfectly summarizes scientific papers for "
+                        f"theoretical physics, mathematical physics, statistical mechanics, "
+                        f"probability, and machine-learning theory. Your answer should be in {lang}. "
+                        f"Avoid hype. Be technically precise."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -147,14 +151,18 @@ Preview of main content:
         tldr = response.choices[0].message.content
         return tldr
 
-    def generate_tldr(self, openai_client: OpenAI, llm_params: dict) -> str:
+    def generate_tldr(
+        self,
+        openai_client: OpenAI,
+        llm_params: dict,
+    ) -> str:
         try:
             tldr = self._generate_tldr_with_llm(openai_client, llm_params)
             self.tldr = tldr
             return tldr
         except Exception as e:
             logger.warning(f"Failed to generate tldr of {self.url}: {e}")
-            tldr = self.abstract or "Failed to generate summary."
+            tldr = self.abstract
             self.tldr = tldr
             return tldr
 
@@ -168,8 +176,8 @@ Preview of main content:
 
         prompt = (
             "Given the beginning of a paper, extract the affiliations of the authors "
-            "in a python list format, sorted by the author order. If there is no "
-            "affiliation found, return an empty list '[]':\n\n"
+            "in a python list format, which is sorted by the author order. "
+            "If there is no affiliation found, return an empty list '[]':\n\n"
             f"{self.full_text}"
         )
 
@@ -182,15 +190,20 @@ Preview of main content:
         prompt_tokens = prompt_tokens[:2000]
         prompt = enc.decode(prompt_tokens)
 
-        affiliations = openai_client.chat.completions.create(
+        affiliations_response = openai_client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are an assistant who extracts affiliations of authors "
-                        "from a paper. Return only a Python list of affiliations, "
-                        "for example [\"Stanford University\", \"MIT\"]. "
-                        "If no affiliation is found, return []."
+                        "You are an assistant who perfectly extracts affiliations of authors "
+                        "from a paper. You should return a python list of affiliations sorted "
+                        "by the author order, like [\"TsingHua University\",\"Peking University\"]. "
+                        "If an affiliation is consisted of multi-level affiliations, like "
+                        "'Department of Computer Science, TsingHua University', you should return "
+                        "the top-level affiliation 'TsingHua University' only. Do not contain "
+                        "duplicated affiliations. If there is no affiliation found, you should "
+                        "return an empty list [ ]. You should only return the final list of "
+                        "affiliations, and do not return any intermediate results."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -198,16 +211,18 @@ Preview of main content:
             **llm_params.get("generation_kwargs", {}),
         )
 
-        affiliations_text = affiliations.choices[0].message.content or "[]"
+        affiliations_text = affiliations_response.choices[0].message.content or ""
+
         match = re.search(r"\[.*?\]", affiliations_text, flags=re.DOTALL)
 
-        if not match:
-            return []
+        if match is None:
+            raise ValueError("No affiliation list found in LLM output.")
 
-        affiliations_list = json.loads(match.group(0))
-        affiliations_list = list(set(affiliations_list))
-        affiliations_list = [str(a) for a in affiliations_list]
-        return affiliations_list
+        affiliations = json.loads(match.group(0))
+        affiliations = list(set(affiliations))
+        affiliations = [str(a) for a in affiliations]
+
+        return affiliations
 
     def generate_affiliations(
         self,
