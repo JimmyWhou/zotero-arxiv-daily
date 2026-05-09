@@ -15,109 +15,243 @@ def _safe_text(*parts: str | None) -> str:
 
 
 PHYSICS_TERMS = {
-    "phase transition": 1.4,
-    "phase transitions": 1.4,
-    "critical phenomena": 1.4,
-    "critical phenomenon": 1.3,
-    "critical point": 1.1,
-    "criticality": 1.1,
-    "universality": 1.2,
-    "universal scaling": 1.2,
-    "renormalization group": 1.5,
-    "renormalisation group": 1.5,
-    "rg flow": 1.2,
-    "wilsonian": 1.2,
-    "mean field": 1.0,
-    "mean-field": 1.0,
-    "spin glass": 1.5,
-    "spin glasses": 1.5,
-    "replica": 1.2,
-    "replica symmetry breaking": 1.6,
-    "cavity method": 1.3,
-    "random matrix": 1.4,
-    "random matrices": 1.4,
-    "large deviations": 1.4,
-    "large deviation principle": 1.5,
-    "rate function": 1.2,
-    "ising": 1.2,
-    "conformal field theory": 1.5,
-    "cft": 1.2,
-    "integrable": 1.2,
-    "integrability": 1.2,
-    "random energy model": 1.5,
-    "rem": 1.1,
-    "grem": 1.1,
-    "boltzmann machine": 1.1,
-    "energy based model": 1.0,
-    "scaling law": 1.0,
-    "scaling laws": 1.0,
-    "teacher student": 1.0,
-    "teacher-student": 1.0,
+    # Core statistical mechanics
+    "statistical mechanics": 2.0,
+    "statistical physics": 1.8,
+    "partition function": 1.8,
+    "free energy": 1.8,
+    "gibbs measure": 1.8,
+    "gibbs state": 1.5,
+    "boltzmann distribution": 1.3,
+    "hamiltonian": 1.0,
+    "order parameter": 1.5,
+    "correlation length": 1.5,
+    "thermodynamic limit": 1.8,
+    "infinite volume": 1.4,
+    "finite size scaling": 1.6,
+    "finite-size scaling": 1.6,
+
+    # Phase transitions and criticality
+    "phase transition": 2.0,
+    "phase transitions": 2.0,
+    "critical phenomena": 2.0,
+    "critical phenomenon": 1.8,
+    "critical point": 1.5,
+    "criticality": 1.5,
+    "critical exponent": 1.8,
+    "critical exponents": 1.8,
+    "scaling exponent": 1.5,
+    "scaling exponents": 1.5,
+    "universality": 1.8,
+    "universality class": 1.8,
+    "universal scaling": 1.6,
+
+    # RG / mean field / saddle point
+    "renormalization group": 2.0,
+    "renormalisation group": 2.0,
+    "renormalization group fixed point": 2.2,
+    "renormalisation group fixed point": 2.2,
+    "rg flow": 1.5,
+    "wilsonian": 1.5,
+    "functional rg": 1.5,
+    "frg": 1.0,
+    "mean field": 1.5,
+    "mean-field": 1.5,
+    "mean field theory": 1.6,
+    "mean-field theory": 1.6,
+    "mean-field limit": 1.5,
+    "saddle point": 1.5,
+    "saddle-point": 1.5,
+
+    # Disordered systems / spin glasses / replica
+    "spin glass": 2.2,
+    "spin glasses": 2.2,
+    "sherrington-kirkpatrick": 2.0,
+    "sherrington kirkpatrick": 2.0,
+    "sk model": 1.8,
+    "replica": 1.6,
+    "replica trick": 2.0,
+    "replica method": 1.8,
+    "replica symmetry breaking": 2.2,
+    "rsb": 1.5,
+    "cavity method": 1.8,
+    "nishimori": 1.8,
+    "parisi": 2.0,
+    "overlap distribution": 1.8,
+    "quenched disorder": 1.6,
+    "quenched": 1.0,
+    "annealed": 1.0,
+
+    # Random matrices / large deviations / probability
+    "random matrix": 2.0,
+    "random matrices": 2.0,
+    "random matrix theory": 2.2,
+    "spectral statistics": 1.5,
+    "eigenvalue statistics": 1.5,
+    "large deviations": 2.0,
+    "large deviation principle": 2.2,
+    "rate function": 1.8,
+    "varadhan": 1.6,
+    "cramer": 1.2,
+    "sanov": 1.2,
+    "limiting distribution": 1.2,
+
+    # Models
+    "ising": 1.5,
+    "ising model": 2.0,
+    "potts model": 1.6,
+    "random energy model": 2.2,
+    "generalized random energy model": 2.2,
+    "grem": 1.5,
+    "rem": 1.5,
+    "lee yang": 1.8,
+    "yang lee": 1.8,
+    "transfer matrix": 1.5,
+
+    # CFT / integrability / mathematical physics
+    "conformal field theory": 2.0,
+    "cft": 1.5,
+    "central charge": 1.6,
+    "operator product expansion": 1.5,
+    "ope": 1.0,
+    "integrable model": 1.8,
+    "integrability": 1.6,
+    "bethe ansatz": 1.8,
+    "yang-baxter": 1.5,
+    "yang baxter": 1.5,
+
+    # ML theory with stat-phys flavour
+    "teacher student": 1.5,
+    "teacher-student": 1.5,
+    "teacher student model": 1.6,
+    "boltzmann machine": 1.3,
+    "restricted boltzmann machine": 1.4,
+    "energy based model": 1.2,
+    "energy-based model": 1.2,
+    "scaling law": 1.2,
+    "scaling laws": 1.2,
+    "neural network theory": 1.2,
+    "generalization theory": 1.0,
 }
 
+
 MATH_TERMS = {
-    "theorem": 1.2,
-    "proof": 1.2,
-    "lemma": 1.0,
-    "proposition": 1.0,
-    "corollary": 0.8,
-    "derivation": 1.2,
-    "derive": 0.8,
-    "asymptotic": 1.1,
-    "limit theorem": 1.2,
-    "large deviation": 1.3,
-    "rate function": 1.2,
-    "variational principle": 1.3,
-    "saddle point": 1.2,
-    "saddle-point": 1.2,
-    "mean-field equation": 1.0,
-    "fixed point": 0.9,
-    "scaling exponent": 1.1,
-    "critical exponent": 1.2,
-    "partition function": 1.1,
-    "free energy": 1.1,
-    "hamiltonian": 0.9,
-    "rigorous": 1.1,
-    "exact solution": 1.2,
-    "solvable": 0.8,
-    "closed form": 0.8,
-    "bound": 0.7,
-    "convergence": 0.7,
+    # Explicit mathematical structure
+    "theorem": 1.7,
+    "lemma": 1.2,
+    "proposition": 1.2,
+    "corollary": 1.0,
+    "proof": 1.7,
+    "rigorous": 1.6,
+    "derive": 1.2,
+    "derivation": 1.8,
+    "we derive": 1.4,
+    "exact formula": 1.6,
+    "closed form": 1.3,
+    "exact solution": 1.6,
+    "solvable": 1.0,
+
+    # Limits / asymptotics
+    "asymptotic": 1.4,
+    "asymptotic expansion": 1.6,
+    "large n limit": 1.5,
+    "thermodynamic limit": 1.8,
+    "infinite volume": 1.4,
+    "hydrodynamic limit": 1.4,
+    "scaling limit": 1.6,
+    "mean field limit": 1.5,
+    "limiting distribution": 1.4,
+    "convergence": 1.0,
+
+    # Variational / saddle point / fixed point
+    "variational formula": 1.6,
+    "variational principle": 1.8,
+    "saddle point": 1.5,
+    "saddle-point": 1.5,
+    "fixed point equation": 1.4,
+    "self consistent equation": 1.3,
+    "self-consistent equation": 1.3,
+    "mean-field equation": 1.4,
+
+    # Stat-mech mathematics
+    "partition function": 1.5,
+    "free energy": 1.5,
+    "rate function": 1.6,
+    "large deviation": 1.8,
+    "large deviations": 1.8,
+    "large deviation principle": 2.0,
+    "legendre transform": 1.4,
+    "laplace principle": 1.4,
+    "varadhan": 1.5,
+
+    # Probability / spectral / operator language
+    "bound": 0.8,
+    "concentration": 1.0,
+    "martingale": 1.0,
+    "spectral": 1.0,
+    "eigenvalue": 1.0,
+    "operator": 0.7,
 }
+
 
 CODE_TERMS = {
     "github": 2.0,
     "gitlab": 1.6,
     "code is available": 2.0,
     "code available": 2.0,
+    "codebase": 1.6,
     "implementation": 1.0,
     "open-source": 1.0,
     "open source": 1.0,
     "reproducible": 1.4,
     "reproducibility": 1.4,
-    "dataset": 0.6,
-    "benchmark": 0.4,
+    "simulation": 0.8,
+    "numerical": 0.8,
     "experiments": 0.6,
-    "simulation": 0.7,
-    "numerical": 0.7,
+    "dataset": 0.4,
+    "benchmark": 0.3,
 }
 
+
 NOISE_TERMS = {
-    "medical image": 2.0,
-    "medical imaging": 2.0,
-    "remote sensing": 2.0,
-    "object detection": 1.6,
-    "semantic segmentation": 1.8,
-    "segmentation": 1.2,
-    "prompt engineering": 1.8,
-    "retrieval augmented generation": 1.5,
-    "rag": 0.8,
-    "chatbot": 1.5,
-    "question answering": 1.2,
-    "leaderboard": 1.2,
-    "dataset paper": 1.5,
-    "survey of": 0.8,
-    "review of": 0.8,
+    # Application-heavy areas
+    "medical image": 2.5,
+    "medical imaging": 2.5,
+    "remote sensing": 2.5,
+    "object detection": 2.2,
+    "semantic segmentation": 2.4,
+    "segmentation": 2.2,
+    "gui": 2.2,
+    "grounding": 1.6,
+    "video generation": 2.4,
+    "image generation": 2.0,
+    "zero-shot": 1.0,
+
+    # LLM/application engineering
+    "prompt engineering": 2.5,
+    "retrieval augmented generation": 2.0,
+    "rag": 1.2,
+    "chatbot": 2.0,
+    "question answering": 1.6,
+    "leaderboard": 2.2,
+    "llm leaderboard": 2.8,
+    "arena": 1.6,
+    "benchmark": 1.8,
+    "dataset": 1.5,
+    "dataset paper": 2.0,
+
+    # MoE engineering
+    "mixture of experts": 2.0,
+    "moe": 1.5,
+    "expert routing": 1.5,
+    "expert pool": 1.5,
+
+    # Generic applied ML
+    "supervised ml": 1.2,
+    "classification accuracy": 1.0,
+    "downstream task": 0.8,
+    "instruction tuning": 1.2,
+    "fine-tuning benchmark": 1.2,
 }
 
 
@@ -135,26 +269,22 @@ def _normalise_similarity(scores: np.ndarray) -> np.ndarray:
         return scores
 
     arr = np.asarray(scores, dtype=float)
-
-    # Existing score is roughly similarity * 10. Clip first.
     arr = np.clip(arr, 0.0, 10.0)
 
-    # If all scores are nearly identical, keep them as-is.
     if float(arr.max() - arr.min()) < 1e-8:
         return arr
 
-    # Mild min-max normalisation helps when embedding scores occupy a narrow band.
     arr = 10.0 * (arr - arr.min()) / (arr.max() - arr.min())
     return np.clip(arr, 0.0, 10.0)
 
 
 def _heuristic_components(paper: Paper) -> dict[str, float]:
     text = _safe_text(
-        paper.title,
-        paper.abstract,
-        paper.full_text,
-        paper.url,
-        paper.pdf_url,
+        getattr(paper, "title", None),
+        getattr(paper, "abstract", None),
+        getattr(paper, "full_text", None),
+        getattr(paper, "url", None),
+        getattr(paper, "pdf_url", None),
     )
 
     physics = _weighted_keyword_score(text, PHYSICS_TERMS, cap=10.0)
@@ -175,16 +305,18 @@ class BaseReranker(ABC):
         self.config = config
 
     def rerank(self, candidates: list[Paper], corpus: list[CorpusPaper]) -> list[Paper]:
-        """Hybrid reranking.
+        """Hybrid theoretical-statistical-physics reranking.
 
-        Step 1:
-            Compute the original Zotero-library similarity score.
+        Original signal:
+            Zotero embedding similarity.
 
-        Step 2:
-            Add a physics/math/code-aware heuristic score.
+        Added signal:
+            physics depth, mathematical depth, code/reproducibility, and
+            engineering/application noise.
 
-        Final score is still written to paper.score, so existing email rendering
-        and executor logic remain compatible.
+        Selection principle:
+            theory first; code helps only when the paper already has real
+            physics/mathematics signal.
         """
         if not candidates:
             return []
@@ -215,16 +347,43 @@ class BaseReranker(ABC):
             code = components["code_reproducibility"]
             noise = components["noise_penalty"]
 
+            # Theory-first scoring.
+            # Code is useful only if the paper already has real physics/math signal.
+            theory_gate = min(physics, math)
+
+            if theory_gate >= 5.0:
+                gated_code = code
+            elif theory_gate >= 3.5:
+                gated_code = 0.35 * code
+            else:
+                gated_code = 0.10 * code
+
             final_score = (
-                0.30 * float(zotero_score)
-                + 0.30 * physics
-                + 0.25 * math
-                + 0.15 * code
-                - 0.25 * noise
+                0.15 * float(zotero_score)
+                + 0.45 * physics
+                + 0.35 * math
+                + 0.05 * gated_code
+                - 0.80 * noise
             )
+
+            # Penalise ML-engineering papers without real theoretical structure.
+            if physics < 4.0 and math < 5.0:
+                final_score -= 2.5
+
+            # Do not let GitHub/code rescue an application paper.
+            if physics < 3.5 and code > 5.0:
+                final_score -= 2.0
+
+            # Reward papers with both real physics and real mathematics.
+            if physics >= 6.0 and math >= 6.0:
+                final_score += 1.0
+
+            if physics >= 7.0 and math >= 7.0:
+                final_score += 0.8
 
             final_score = float(np.clip(final_score, 0.0, 10.0))
 
+            # Attach diagnostics used by the email renderer.
             paper.zotero_similarity = float(zotero_score)
             paper.physics_depth = physics
             paper.math_depth = math
