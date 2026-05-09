@@ -304,19 +304,29 @@ class BaseReranker(ABC):
     def __init__(self, config: DictConfig):
         self.config = config
 
+    def _theory_filter_enabled(self) -> bool:
+        """Return whether strict theoretical-stat-phys scoring is enabled.
+
+        Defaults to False to preserve upstream-compatible behaviour in tests.
+        """
+        try:
+            if self.config is None:
+                return False
+            return bool(self.config.executor.get("theory_filter", False))
+        except Exception:
+            return False
+
     def rerank(self, candidates: list[Paper], corpus: list[CorpusPaper]) -> list[Paper]:
-        """Hybrid theoretical-statistical-physics reranking.
+        """Rerank papers.
 
-        Original signal:
-            Zotero embedding similarity.
+        Default behaviour:
+            rank only by Zotero embedding similarity. This preserves upstream
+            tests and original behaviour.
 
-        Added signal:
+        When config.executor.theory_filter=true:
+            use a theoretical-statistical-physics score based on
             physics depth, mathematical depth, code/reproducibility, and
             engineering/application noise.
-
-        Selection principle:
-            theory first; code helps only when the paper already has real
-            physics/mathematics signal.
         """
         if not candidates:
             return []
@@ -339,6 +349,8 @@ class BaseReranker(ABC):
             zotero_scores = (sim * time_decay_weight).sum(axis=1) * 10.0
             zotero_scores = _normalise_similarity(zotero_scores)
 
+        theory_filter = self._theory_filter_enabled()
+
         for paper, zotero_score in zip(candidates, zotero_scores):
             components = _heuristic_components(paper)
 
@@ -346,6 +358,18 @@ class BaseReranker(ABC):
             math = components["math_depth"]
             code = components["code_reproducibility"]
             noise = components["noise_penalty"]
+
+            # Always attach diagnostics for email rendering.
+            paper.zotero_similarity = float(zotero_score)
+            paper.physics_depth = physics
+            paper.math_depth = math
+            paper.code_reproducibility = code
+            paper.noise_penalty = noise
+
+            if not theory_filter:
+                # Upstream-compatible path.
+                paper.score = float(zotero_score)
+                continue
 
             # Theory-first scoring.
             # Code is useful only if the paper already has real physics/math signal.
@@ -381,15 +405,7 @@ class BaseReranker(ABC):
             if physics >= 7.0 and math >= 7.0:
                 final_score += 0.8
 
-            final_score = float(np.clip(final_score, 0.0, 10.0))
-
-            # Attach diagnostics used by the email renderer.
-            paper.zotero_similarity = float(zotero_score)
-            paper.physics_depth = physics
-            paper.math_depth = math
-            paper.code_reproducibility = code
-            paper.noise_penalty = noise
-            paper.score = final_score
+            paper.score = float(np.clip(final_score, 0.0, 10.0))
 
         candidates = sorted(candidates, key=lambda x: x.score or 0.0, reverse=True)
         return candidates
