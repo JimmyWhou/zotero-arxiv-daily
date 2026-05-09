@@ -31,7 +31,9 @@ def normalize_path_patterns(
         )
 
     if any(not isinstance(pattern, str) for pattern in patterns):
-        raise TypeError(f"config.zotero.{config_key} must contain only string patterns.")
+        raise TypeError(
+            f"config.zotero.{config_key} must contain only glob pattern strings."
+        )
 
     return list(patterns)
 
@@ -157,6 +159,13 @@ class Executor:
 
         return corpus
 
+    def _theory_filter_enabled(self) -> bool:
+        """Strict score filtering is opt-in to keep tests/upstream behaviour stable."""
+        try:
+            return bool(self.config.executor.get("theory_filter", False))
+        except Exception:
+            return False
+
     def _min_score(self) -> float:
         try:
             return float(self.config.executor.get("min_score", 5.2))
@@ -197,26 +206,27 @@ class Executor:
 
             reranked_papers = self.reranker.rerank(all_papers, corpus)
 
-            min_score = self._min_score()
-            before_filter = len(reranked_papers)
+            if self._theory_filter_enabled():
+                min_score = self._min_score()
+                before_filter = len(reranked_papers)
 
-            reranked_papers = [
-                p for p in reranked_papers
-                if (p.score or 0.0) >= min_score
-            ]
+                reranked_papers = [
+                    p for p in reranked_papers
+                    if (p.score or 0.0) >= min_score
+                ]
 
-            logger.info(
-                f"Kept {len(reranked_papers)} / {before_filter} papers "
-                f"after min_score={min_score:.2f} filtering"
-            )
+                logger.info(
+                    f"Kept {len(reranked_papers)} / {before_filter} papers "
+                    f"after min_score={min_score:.2f} filtering"
+                )
+
+                if len(reranked_papers) == 0 and not self.config.executor.send_empty:
+                    logger.info(
+                        "No papers passed the score threshold. No email will be sent."
+                    )
+                    return
 
             reranked_papers = reranked_papers[: self.config.executor.max_paper_num]
-
-            if len(reranked_papers) == 0 and not self.config.executor.send_empty:
-                logger.info(
-                    "No papers passed the score threshold. No email will be sent."
-                )
-                return
 
             logger.info("Generating TLDR and affiliations...")
 
