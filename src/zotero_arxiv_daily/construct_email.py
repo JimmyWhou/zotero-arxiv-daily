@@ -1,131 +1,143 @@
-from .protocol import Paper
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import html
 import math
+
+from .protocol import Paper
 
 
 framework = """
-<!DOCTYPE HTML>
 <html>
-<head>
-  <style>
-    .star-wrapper {
-      font-size: 1.3em; /* 调整星星大小 */
-      line-height: 1; /* 确保垂直对齐 */
-      display: inline-flex;
-      align-items: center; /* 保持对齐 */
-    }
-    .half-star {
-      display: inline-block;
-      width: 0.5em; /* 半颗星的宽度 */
-      overflow: hidden;
-      white-space: nowrap;
-      vertical-align: middle;
-    }
-    .full-star {
-      vertical-align: middle;
-    }
-  </style>
-</head>
-<body>
-
-<div>
-    __CONTENT__
-</div>
-
-<br><br>
-<div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.45;">
+__CONTENT__
+<hr/>
+<p style="color:#777;font-size:13px;">
 To unsubscribe, remove your email in your Github Action setting.
-</div>
-
+</p>
 </body>
 </html>
 """
 
-def get_empty_html():
-  block_template = """
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
-  <tr>
-    <td style="font-size: 20px; font-weight: bold; color: #333;">
-        No Papers Today. Take a Rest!
-    </td>
-  </tr>
-  </table>
-  """
-  return block_template
 
-def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None):
-    block_template = """
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
-    <tr>
-        <td style="font-size: 20px; font-weight: bold; color: #333;">
-            {title}
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #666; padding: 8px 0;">
-            {authors}
-            <br>
-            <i>{affiliations}</i>
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>Relevance:</strong> {rate}
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>TLDR:</strong> {tldr}
-        </td>
-    </tr>
+def _esc(x) -> str:
+    return html.escape(str(x or ""))
 
-    <tr>
-        <td style="padding: 8px 0;">
-            <a href="{pdf_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">PDF</a>
-        </td>
-    </tr>
-</table>
+
+def get_empty_html() -> str:
+    return """
+<p style="font-size:16px;">No Papers Today. Take a Rest!</p>
 """
-    return block_template.format(title=title, authors=authors,rate=rate, tldr=tldr, pdf_url=pdf_url, affiliations=affiliations)
 
-def get_stars(score:float):
-    full_star = '<span class="full-star">⭐</span>'
-    half_star = '<span class="half-star">⭐</span>'
-    low = 6
-    high = 8
+
+def _fmt_score(x) -> str:
+    if x is None:
+        return "N/A"
+    try:
+        return f"{float(x):.1f}/10"
+    except Exception:
+        return "N/A"
+
+
+def get_stars(score: float | None) -> str:
+    if score is None:
+        return ""
+
+    full_star = "⭐"
+    low = 4.0
+    high = 8.0
+
     if score <= low:
-        return ''
-    elif score >= high:
+        return ""
+
+    if score >= high:
         return full_star * 5
-    else:
-        interval = (high-low) / 10
-        star_num = math.ceil((score-low) / interval)
-        full_star_num = int(star_num/2)
-        half_star_num = star_num - full_star_num * 2
-        return '<div class="star-wrapper">'+full_star * full_star_num + half_star * half_star_num + '</div>'
+
+    interval = (high - low) / 5
+    star_num = math.ceil((score - low) / interval)
+    return full_star * max(1, min(5, star_num))
 
 
-def render_email(papers:list[Paper]) -> str:
-    parts = []
-    if len(papers) == 0 :
-        return framework.replace('__CONTENT__', get_empty_html())
-    
-    for p in papers:
-        #rate = get_stars(p.score)
-        rate = round(p.score, 1) if p.score is not None else 'Unknown'
-        author_list = [a for a in p.authors]
-        num_authors = len(author_list)
-        if num_authors <= 5:
-            authors = ', '.join(author_list)
-        else:
-            authors = ', '.join(author_list[:3] + ['...'] + author_list[-2:])
-        if p.affiliations is not None:
-            affiliations = p.affiliations[:5]
-            affiliations = ', '.join(affiliations)
-            if len(p.affiliations) > 5:
-                affiliations += ', ...'
-        else:
-            affiliations = 'Unknown Affiliation'
-        parts.append(get_block_html(p.title, authors, rate, p.tldr, p.pdf_url, affiliations))
+def _authors_text(authors: list[str]) -> str:
+    author_list = [a for a in authors or []]
+    num_authors = len(author_list)
 
-    content = '<br>' + '</br><br>'.join(parts) + '</br>'
-    return framework.replace('__CONTENT__', content)
+    if num_authors == 0:
+        return "Unknown authors"
+
+    if num_authors <= 5:
+        return ", ".join(author_list)
+
+    return ", ".join(author_list[:3] + ["..."] + author_list[-2:])
+
+
+def _affiliations_text(affiliations: list[str] | None) -> str:
+    if affiliations is None:
+        return "Unknown affiliation"
+
+    if len(affiliations) == 0:
+        return "Unknown affiliation"
+
+    shown = affiliations[:5]
+    text = ", ".join(shown)
+
+    if len(affiliations) > 5:
+        text += ", ..."
+
+    return text
+
+
+def get_block_html(p: Paper) -> str:
+    title = _esc(p.title)
+    authors = _esc(_authors_text(p.authors))
+    affiliations = _esc(_affiliations_text(p.affiliations))
+    tldr = _esc(p.tldr or "")
+
+    score = _fmt_score(p.score)
+    zotero_similarity = _fmt_score(getattr(p, "zotero_similarity", None))
+    physics_depth = _fmt_score(getattr(p, "physics_depth", None))
+    math_depth = _fmt_score(getattr(p, "math_depth", None))
+    code_signal = _fmt_score(getattr(p, "code_reproducibility", None))
+    noise_penalty = _fmt_score(getattr(p, "noise_penalty", None))
+
+    stars = get_stars(p.score)
+
+    paper_url = _esc(p.url)
+    pdf_url = _esc(p.pdf_url or p.url)
+
+    return f"""
+<div style="border:1px solid #ddd;border-radius:10px;padding:16px;margin:16px 0;">
+  <h2 style="margin-top:0;font-size:18px;">
+    <a href="{paper_url}" style="text-decoration:none;color:#1f4e79;">{title}</a>
+  </h2>
+
+  <p style="margin:4px 0;color:#333;"><b>Authors:</b> {authors}</p>
+  <p style="margin:4px 0;color:#555;"><b>Affiliations:</b> {affiliations}</p>
+
+  <p style="margin:8px 0;">
+    <b>Final relevance:</b> {score} {stars}<br/>
+    <b>Zotero similarity:</b> {zotero_similarity}<br/>
+    <b>Physics depth:</b> {physics_depth}<br/>
+    <b>Math depth:</b> {math_depth}<br/>
+    <b>Code/reproducibility signal:</b> {code_signal}<br/>
+    <b>Noise penalty:</b> {noise_penalty}
+  </p>
+
+  <p style="margin:8px 0;"><b>Summary:</b> {tldr}</p>
+
+  <p style="margin:8px 0;">
+    <a href="{paper_url}">arXiv page</a>
+    &nbsp;|&nbsp;
+    <a href="{pdf_url}">PDF</a>
+  </p>
+</div>
+"""
+
+
+def render_email(papers: list[Paper]) -> str:
+    if len(papers) == 0:
+        return framework.replace("__CONTENT__", get_empty_html())
+
+    parts = [get_block_html(p) for p in papers]
+    content = "\n".join(parts)
+    return framework.replace("__CONTENT__", content)
