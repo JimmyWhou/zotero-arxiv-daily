@@ -38,17 +38,82 @@ def normalize_path_patterns(
     return list(patterns)
 
 
+def normalize_tag_patterns(
+    patterns: list[str] | ListConfig | None,
+    config_key: str,
+) -> list[str] | None:
+    if patterns is None:
+        return None
+
+    if not isinstance(patterns, (list, ListConfig)):
+        raise TypeError(
+            f"config.zotero.{config_key} must be a list of tag glob patterns or null, "
+            'for example ["auto/field/stat-mech", "auto/method/replica"].'
+        )
+
+    if any(not isinstance(pattern, str) for pattern in patterns):
+        raise TypeError(
+            f"config.zotero.{config_key} must contain only tag pattern strings."
+        )
+
+    return list(patterns)
+
+
+def _make_corpus_paper(
+    title: str,
+    abstract: str,
+    added_date: datetime,
+    paths: list[str],
+    tags: list[str],
+) -> CorpusPaper:
+    """Create CorpusPaper while remaining compatible with older protocol.py.
+
+    Newer protocol.py should define:
+        tags: list[str] = field(default_factory=list)
+
+    If not, we dynamically attach tags so this executor still works.
+    """
+    try:
+        return CorpusPaper(
+            title=title,
+            abstract=abstract,
+            added_date=added_date,
+            paths=paths,
+            tags=tags,
+        )
+    except TypeError:
+        paper = CorpusPaper(
+            title=title,
+            abstract=abstract,
+            added_date=added_date,
+            paths=paths,
+        )
+        setattr(paper, "tags", tags)
+        return paper
+
+
 class Executor:
     def __init__(self, config: DictConfig):
         self.config = config
 
+        zotero_cfg = config.zotero
+
         self.include_path_patterns = normalize_path_patterns(
-            config.zotero.include_path,
+            zotero_cfg.get("include_path", None),
             "include_path",
         )
         self.ignore_path_patterns = normalize_path_patterns(
-            config.zotero.ignore_path,
+            zotero_cfg.get("ignore_path", None),
             "ignore_path",
+        )
+
+        self.include_tag_patterns = normalize_tag_patterns(
+            zotero_cfg.get("include_tags", None),
+            "include_tags",
+        )
+        self.ignore_tag_patterns = normalize_tag_patterns(
+            zotero_cfg.get("ignore_tags", None),
+            "ignore_tags",
         )
 
         self.retrievers = {
@@ -96,64 +161,125 @@ class Executor:
 
             return collections[col_key]["data"]["name"]
 
+        out: list[CorpusPaper] = []
+
         for c in corpus:
+            data = c.get("data", {})
+
             paths = [
                 get_collection_path(col)
-                for col in c["data"].get("collections", [])
+                for col in data.get("collections", [])
                 if col in collections
             ]
-            c["paths"] = paths
 
-        logger.info(f"Fetched {len(corpus)} zotero papers")
+            tags = [
+                t.get("tag", "")
+                for t in data.get("tags", [])
+                if t.get("tag")
+            ]
 
-        return [
-            CorpusPaper(
-                title=c["data"]["title"],
-                abstract=c["data"]["abstractNote"],
-                added_date=datetime.strptime(
-                    c["data"]["dateAdded"],
+            try:
+                added_date = datetime.strptime(
+                    data["dateAdded"],
                     "%Y-%m-%dT%H:%M:%SZ",
-                ),
-                paths=c["paths"],
+                )
+            except Exception:
+                added_date = datetime.utcnow()
+
+            out.append(
+                _make_corpus_paper(
+                    title=data.get("title", ""),
+                    abstract=data.get("abstractNote", ""),
+                    added_date=added_date,
+                    paths=paths,
+                    tags=tags,
+                )
             )
-            for c in corpus
-        ]
+
+        logger.info(f"Fetched {len(out)} zotero papers")
+        return out
+
+    def _matches_any_path_pattern(self, paper: CorpusPaper, patterns: list[str] | None) -> bool:
+        if not patterns:
+            return False
+
+        return any(
+            glob_match(path, pattern)
+            for path in paper.paths
+            for pattern in patterns
+        )
+
+    def _matches_any_tag_pattern(self, paper: CorpusPaper, patterns: list[str] | None) -> bool:
+        if not patterns:
+            return False
+
+        tags = getattr(paper, "tags", []) or []
+
+        return any(
+            glob_match(tag, pattern)
+            for tag in tags
+            for pattern in patterns
+        )
 
     def filter_corpus(self, corpus: list[CorpusPaper]) -> list[CorpusPaper]:
-        if self.include_path_patterns:
+        has_include_paths = bool(self.include_path_patterns)
+        has_include_tags = bool(self.include_tag_patterns)
+        has_ignore_paths = bool(self.ignore_path_patterns)
+        has_ignore_tags = bool(self.ignore_tag_patterns)
+
+        if has_include_paths or has_include_tags:
             logger.info(
-                f"Selecting zotero papers matching include_path: "
-                f"{self.include_path_patterns}"
+                "Selecting zotero papers by include filters: "
+                f"include_path={self.include_path_patterns}, "
+                f"include_tags={self.include_tag_patterns}"
             )
 
-            corpus = [
-                c for c in corpus
-                if any(
-                    glob_match(path, pattern)
-                    for path in c.paths
-                    for pattern in self.include_path_patterns
-                )
-            ]
+            selected = []
 
-        if self.ignore_path_patterns:
+            for c in corpus:
+                path_ok = self._matches_any_path_pattern(c, self.include_path_patterns)
+                tag_ok = self._matches_any_tag_pattern(c, self.include_tag_patterns)
+
+                # If both include_path and include_tags are set, OR logic is used.
+                if path_ok or tag_ok:
+                    selected.append(c)
+
+            corpus = selected
+
+        if has_ignore_paths or has_ignore_tags:
             logger.info(
-                f"Excluding zotero papers matching ignore_path: "
-                f"{self.ignore_path_patterns}"
+                "Excluding zotero papers by ignore filters: "
+                f"ignore_path={self.ignore_path_patterns}, "
+                f"ignore_tags={self.ignore_tag_patterns}"
             )
 
-            corpus = [
-                c for c in corpus
-                if not any(
-                    glob_match(path, pattern)
-                    for path in c.paths
-                    for pattern in self.ignore_path_patterns
-                )
-            ]
+            filtered = []
 
-        if self.include_path_patterns or self.ignore_path_patterns:
-            samples = random.sample(corpus, min(5, len(corpus)))
+            for c in corpus:
+                path_bad = self._matches_any_path_pattern(c, self.ignore_path_patterns)
+                tag_bad = self._matches_any_tag_pattern(c, self.ignore_tag_patterns)
+
+                if not (path_bad or tag_bad):
+                    filtered.append(c)
+
+            corpus = filtered
+
+        if (
+            has_include_paths
+            or has_include_tags
+            or has_ignore_paths
+            or has_ignore_tags
+        ):
+            samples = random.sample(corpus, min(5, len(corpus))) if corpus else []
             samples_text = "\n".join(
-                [c.title + " - " + "\n".join(c.paths) for c in samples]
+                [
+                    c.title
+                    + " | paths="
+                    + ", ".join(c.paths)
+                    + " | tags="
+                    + ", ".join(getattr(c, "tags", []) or [])
+                    for c in samples
+                ]
             )
             logger.info(f"Selected {len(corpus)} zotero papers:\n{samples_text}\n...")
 
@@ -168,9 +294,84 @@ class Executor:
 
     def _min_score(self) -> float:
         try:
-            return float(self.config.executor.get("min_score", 5.2))
+            return float(self.config.executor.get("min_score", 2.0))
         except Exception:
-            return 5.2
+            return 2.0
+
+    def _selection_mode(self) -> str:
+        try:
+            return str(self.config.executor.get("selection_mode", "min_score"))
+        except Exception:
+            return "min_score"
+
+    def _filter_by_theory_or_code(self, papers):
+        min_score = self._min_score()
+        before_filter = len(papers)
+
+        theory_min_physics = float(
+            self.config.executor.get("theory_min_physics", 5.0)
+        )
+        theory_min_math = float(
+            self.config.executor.get("theory_min_math", 5.0)
+        )
+        code_min = float(
+            self.config.executor.get("code_min", 5.0)
+        )
+        code_min_context = float(
+            self.config.executor.get("code_min_context", 3.0)
+        )
+        code_max_noise = float(
+            self.config.executor.get("code_max_noise", 4.0)
+        )
+
+        def keep(p):
+            score = p.score or 0.0
+            physics = getattr(p, "physics_depth", 0.0) or 0.0
+            math = getattr(p, "math_depth", 0.0) or 0.0
+            code = getattr(p, "code_reproducibility", 0.0) or 0.0
+            noise = getattr(p, "noise_penalty", 0.0) or 0.0
+            zotero = getattr(p, "zotero_similarity", 0.0) or 0.0
+
+            theory_lane = (
+                physics >= theory_min_physics
+                and math >= theory_min_math
+            )
+
+            code_lane = (
+                code >= code_min
+                and max(physics, math, zotero) >= code_min_context
+                and noise <= code_max_noise
+            )
+
+            return score >= min_score and (theory_lane or code_lane)
+
+        kept = [p for p in papers if keep(p)]
+
+        logger.info(
+            f"Kept {len(kept)} / {before_filter} papers using theory_or_code "
+            f"selection "
+            f"(min_score={min_score:.2f}, "
+            f"theory=physics>={theory_min_physics},math>={theory_min_math}, "
+            f"code=code>={code_min},context>={code_min_context},noise<={code_max_noise})"
+        )
+
+        return kept
+
+    def _filter_by_min_score(self, papers):
+        min_score = self._min_score()
+        before_filter = len(papers)
+
+        kept = [
+            p for p in papers
+            if (p.score or 0.0) >= min_score
+        ]
+
+        logger.info(
+            f"Kept {len(kept)} / {before_filter} papers "
+            f"after min_score={min_score:.2f} filtering"
+        )
+
+        return kept
 
     def run(self):
         corpus = self.fetch_zotero_corpus()
@@ -207,18 +408,12 @@ class Executor:
             reranked_papers = self.reranker.rerank(all_papers, corpus)
 
             if self._theory_filter_enabled():
-                min_score = self._min_score()
-                before_filter = len(reranked_papers)
+                mode = self._selection_mode()
 
-                reranked_papers = [
-                    p for p in reranked_papers
-                    if (p.score or 0.0) >= min_score
-                ]
-
-                logger.info(
-                    f"Kept {len(reranked_papers)} / {before_filter} papers "
-                    f"after min_score={min_score:.2f} filtering"
-                )
+                if mode == "theory_or_code":
+                    reranked_papers = self._filter_by_theory_or_code(reranked_papers)
+                else:
+                    reranked_papers = self._filter_by_min_score(reranked_papers)
 
                 if len(reranked_papers) == 0 and not self.config.executor.send_empty:
                     logger.info(
