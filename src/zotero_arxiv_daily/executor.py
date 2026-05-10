@@ -71,7 +71,7 @@ def _make_corpus_paper(
     Newer protocol.py should define:
         tags: list[str] = field(default_factory=list)
 
-    If not, we dynamically attach tags so this executor still works.
+    If not, dynamically attach tags so this executor still works.
     """
     try:
         return CorpusPaper(
@@ -199,17 +199,27 @@ class Executor:
         logger.info(f"Fetched {len(out)} zotero papers")
         return out
 
-    def _matches_any_path_pattern(self, paper: CorpusPaper, patterns: list[str] | None) -> bool:
+    def _matches_any_path_pattern(
+        self,
+        paper: CorpusPaper,
+        patterns: list[str] | None,
+    ) -> bool:
         if not patterns:
             return False
 
+        paths = getattr(paper, "paths", []) or []
+
         return any(
             glob_match(path, pattern)
-            for path in paper.paths
+            for path in paths
             for pattern in patterns
         )
 
-    def _matches_any_tag_pattern(self, paper: CorpusPaper, patterns: list[str] | None) -> bool:
+    def _matches_any_tag_pattern(
+        self,
+        paper: CorpusPaper,
+        patterns: list[str] | None,
+    ) -> bool:
         if not patterns:
             return False
 
@@ -222,23 +232,34 @@ class Executor:
         )
 
     def filter_corpus(self, corpus: list[CorpusPaper]) -> list[CorpusPaper]:
-        has_include_paths = bool(self.include_path_patterns)
-        has_include_tags = bool(self.include_tag_patterns)
-        has_ignore_paths = bool(self.ignore_path_patterns)
-        has_ignore_tags = bool(self.ignore_tag_patterns)
+        """Filter Zotero corpus by collection paths and/or tags.
+
+        Important test-compatibility detail:
+        some tests construct Executor-like objects without calling __init__.
+        Therefore all filter attributes must be read through getattr(...).
+        """
+        include_path_patterns = getattr(self, "include_path_patterns", None)
+        ignore_path_patterns = getattr(self, "ignore_path_patterns", None)
+        include_tag_patterns = getattr(self, "include_tag_patterns", None)
+        ignore_tag_patterns = getattr(self, "ignore_tag_patterns", None)
+
+        has_include_paths = bool(include_path_patterns)
+        has_include_tags = bool(include_tag_patterns)
+        has_ignore_paths = bool(ignore_path_patterns)
+        has_ignore_tags = bool(ignore_tag_patterns)
 
         if has_include_paths or has_include_tags:
             logger.info(
                 "Selecting zotero papers by include filters: "
-                f"include_path={self.include_path_patterns}, "
-                f"include_tags={self.include_tag_patterns}"
+                f"include_path={include_path_patterns}, "
+                f"include_tags={include_tag_patterns}"
             )
 
             selected = []
 
             for c in corpus:
-                path_ok = self._matches_any_path_pattern(c, self.include_path_patterns)
-                tag_ok = self._matches_any_tag_pattern(c, self.include_tag_patterns)
+                path_ok = self._matches_any_path_pattern(c, include_path_patterns)
+                tag_ok = self._matches_any_tag_pattern(c, include_tag_patterns)
 
                 # If both include_path and include_tags are set, OR logic is used.
                 if path_ok or tag_ok:
@@ -249,15 +270,15 @@ class Executor:
         if has_ignore_paths or has_ignore_tags:
             logger.info(
                 "Excluding zotero papers by ignore filters: "
-                f"ignore_path={self.ignore_path_patterns}, "
-                f"ignore_tags={self.ignore_tag_patterns}"
+                f"ignore_path={ignore_path_patterns}, "
+                f"ignore_tags={ignore_tag_patterns}"
             )
 
             filtered = []
 
             for c in corpus:
-                path_bad = self._matches_any_path_pattern(c, self.ignore_path_patterns)
-                tag_bad = self._matches_any_tag_pattern(c, self.ignore_tag_patterns)
+                path_bad = self._matches_any_path_pattern(c, ignore_path_patterns)
+                tag_bad = self._matches_any_tag_pattern(c, ignore_tag_patterns)
 
                 if not (path_bad or tag_bad):
                     filtered.append(c)
@@ -275,7 +296,7 @@ class Executor:
                 [
                     c.title
                     + " | paths="
-                    + ", ".join(c.paths)
+                    + ", ".join(getattr(c, "paths", []) or [])
                     + " | tags="
                     + ", ".join(getattr(c, "tags", []) or [])
                     for c in samples
@@ -330,7 +351,7 @@ class Executor:
             math = getattr(p, "math_depth", 0.0) or 0.0
             code = getattr(p, "code_reproducibility", 0.0) or 0.0
             noise = getattr(p, "noise_penalty", 0.0) or 0.0
-            zotero = getattr(p, "zotero_similarity", 0.0) or 0.0
+            zotero_score = getattr(p, "zotero_similarity", 0.0) or 0.0
 
             theory_lane = (
                 physics >= theory_min_physics
@@ -339,7 +360,7 @@ class Executor:
 
             code_lane = (
                 code >= code_min
-                and max(physics, math, zotero) >= code_min_context
+                and max(physics, math, zotero_score) >= code_min_context
                 and noise <= code_max_noise
             )
 
