@@ -264,7 +264,7 @@ def _weighted_keyword_score(text: str, weights: dict[str, float], cap: float = 1
 
 
 def _normalise_similarity(scores: np.ndarray) -> np.ndarray:
-    """Map Zotero similarity scores to a stable 0--10 scale."""
+    """Map Zotero similarity scores to a stable 0--10 scale for theory-filter mode."""
     if len(scores) == 0:
         return scores
 
@@ -320,8 +320,7 @@ class BaseReranker(ABC):
         """Rerank papers.
 
         Default behaviour:
-            rank only by Zotero embedding similarity. This preserves upstream
-            tests and original behaviour.
+            rank only by Zotero embedding similarity.
 
         When config.executor.theory_filter=true:
             use a theoretical-statistical-physics score based on
@@ -334,7 +333,7 @@ class BaseReranker(ABC):
         corpus = sorted(corpus, key=lambda x: x.added_date, reverse=True)
 
         if len(corpus) == 0:
-            zotero_scores = np.zeros(len(candidates), dtype=float)
+            raw_zotero_scores = np.zeros(len(candidates), dtype=float)
         else:
             time_decay_weight = 1 / (1 + np.log10(np.arange(len(corpus)) + 1))
             time_decay_weight = time_decay_weight / time_decay_weight.sum()
@@ -346,12 +345,20 @@ class BaseReranker(ABC):
 
             assert sim.shape == (len(candidates), len(corpus))
 
-            zotero_scores = (sim * time_decay_weight).sum(axis=1) * 10.0
-            zotero_scores = _normalise_similarity(zotero_scores)
+            raw_zotero_scores = (sim * time_decay_weight).sum(axis=1) * 10.0
 
         theory_filter = self._theory_filter_enabled()
 
-        for paper, zotero_score in zip(candidates, zotero_scores):
+        if theory_filter:
+            zotero_scores_for_theory = _normalise_similarity(raw_zotero_scores)
+        else:
+            zotero_scores_for_theory = raw_zotero_scores
+
+        for paper, raw_score, theory_zotero_score in zip(
+            candidates,
+            raw_zotero_scores,
+            zotero_scores_for_theory,
+        ):
             components = _heuristic_components(paper)
 
             physics = components["physics_depth"]
@@ -360,15 +367,15 @@ class BaseReranker(ABC):
             noise = components["noise_penalty"]
 
             # Always attach diagnostics for email rendering.
-            paper.zotero_similarity = float(zotero_score)
+            paper.zotero_similarity = float(theory_zotero_score)
             paper.physics_depth = physics
             paper.math_depth = math
             paper.code_reproducibility = code
             paper.noise_penalty = noise
 
             if not theory_filter:
-                # Upstream-compatible path.
-                paper.score = float(zotero_score)
+                # Upstream-compatible path: score is pure raw Zotero similarity.
+                paper.score = float(raw_score)
                 continue
 
             # Theory-first scoring.
@@ -383,7 +390,7 @@ class BaseReranker(ABC):
                 gated_code = 0.10 * code
 
             final_score = (
-                0.15 * float(zotero_score)
+                0.15 * float(theory_zotero_score)
                 + 0.45 * physics
                 + 0.35 * math
                 + 0.05 * gated_code
